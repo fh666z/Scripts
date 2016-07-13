@@ -9,68 +9,6 @@ CERT_DATA_TEMPLATE_STRING = "<certificate_data_{0}>"
 CERT_LEN_TEMPLATE_STRING = "<certificate_len_{0}>"
 
 
-def generate_template(tar):
-	"""
-	Function generates and returns a string that holds the template for the header
-	file with specific patterns to be replaced by Certificate binary representation
-	and Certificate size in bytes according to the number of certificates in a tar 
-	archive
-	"""
-	cert_number = len(tar.getmembers())
-	template_str = "#ifndef CERTS_H\n#define CERTS_H\n\n"
-	template_str += "#define NUMBER_OF_CERTS\t\t{}\n\n".format(cert_number)
-	
-	template_str += "const char cert_binary_storage[NUMBER_OF_CERTS][] = {\n"
-	for cert_iter_id in xrange(cert_number):
-		template_str += "\t" + CERT_DATA_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
-	template_str += "};\n\n"
-	
-	template_str += "const int cert_size_bytes[NUMBER_OF_CERTS][] = {\n"
-	for cert_iter_id in xrange(cert_number):
-		template_str += "\t" + CERT_LEN_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
-	template_str += "};\n\n"
-	
-	template_str += "#endif\n\n"
-	
-	return template_str
-
-
-def get_c_format_string_from_tar(tar_content_files):
-	"""
-	Generator function that reads an extracted certificate in binary format, 
-	converts it to C format and yields it as a list of hexadecimals
-	"""
-	
-	index = 0
-	for tarinfo in tar_content_files:
-		certfile = open(tarinfo.name, 'rb')
-		binary_content = certfile.read()
-
-		hex_content = binascii.b2a_hex(binary_content)
-		hex_content = re.findall('..', hex_content)
-
-		c_format_hex_list = ['0x'+num for num in hex_content]
-		c_format_str = "{" + ",".join(c_format_hex_list) + "}"
-
-		yield (index, c_format_str, len(c_format_hex_list))
-		index = index + 1
-		
-		
-def replace_data_in_template(template, data_repl_string, size_repl_string, idx):
-	"""
-	Function takes as parameters the template string, hexadecimal certificate data
-	representation string, certificate size in bytes string and certificate number
-	and replaces the patterns from template with the given strings according to
-	certificate number
-	"""
-	data_pattern = CERT_DATA_TEMPLATE_STRING.format(idx)
-	template = re.sub(data_pattern, data_repl_string, template)
-
-	size_pattern = CERT_LEN_TEMPLATE_STRING.format(idx)
-	template = re.sub(size_pattern, size_repl_string, template)
-	
-	return template
-
 def print_program_info():
 	print 	"Usage: python gen_cert_header.py [TAR ARCHIVE] [OPTIONS]  \n\n"			\
 			" Program generates C style header file containing array with \n"			\
@@ -86,6 +24,11 @@ def print_program_info():
 
 
 def eval_program_params(argv, argc):
+	"""
+	Function evaluates passed params and prints usage info if params are incorrect.
+	If the needed params are provided it extracts tar filename to be used and whether
+	cleanup is required
+	"""
 	allowed_params = ["-t","--tar","-h","--help","-c","--cleanup"]
 
 	# Cases where usage information is printed
@@ -123,6 +66,67 @@ def eval_program_params(argv, argc):
 	do_cleanup = "-c" in argv or "--cleanup" in argv
 
 	return tar_file, do_cleanup
+
+def generate_template(tar):
+	"""
+	Function generates and returns a string that holds the template for the header
+	file with specific patterns to be replaced by Certificate binary representation
+	and Certificate size in bytes according to the number of certificates in a tar 
+	archive
+	"""
+	cert_number = len(tar.getmembers())
+	template_str = "#ifndef CERTS_H\n#define CERTS_H\n\n"
+	template_str += "#define NUMBER_OF_CERTS\t\t{}\n\n".format(cert_number)
+	
+	template_str += "const char cert_binary_storage[NUMBER_OF_CERTS][] = {\n"
+	for cert_iter_id in xrange(cert_number):
+		template_str += "\t" + CERT_DATA_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
+	template_str += "};\n\n"
+	
+	template_str += "const int cert_size_bytes[NUMBER_OF_CERTS][] = {\n"
+	for cert_iter_id in xrange(cert_number):
+		template_str += "\t" + CERT_LEN_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
+	template_str += "};\n\n"
+	
+	template_str += "#endif\n\n"
+	
+	return template_str
+
+
+def get_c_format_string_from_tar(tar_content_files):
+	"""
+	Generator function that reads an extracted certificate in binary format, 
+	converts it to C format and yields it as a list of hexadecimals
+	"""
+	index = 0
+	for tarinfo in tar_content_files:
+		certfile = open(tarinfo.name, 'rb')
+		binary_content = certfile.read()
+
+		hex_content = binascii.b2a_hex(binary_content)
+		hex_content = re.findall('..', hex_content)
+
+		c_format_hex_list = ['0x'+num for num in hex_content]
+		c_format_str = "{" + ",".join(c_format_hex_list) + "}"
+
+		yield (index, c_format_str, len(c_format_hex_list))
+		index = index + 1
+		
+		
+def replace_data_in_template(template, data_repl_string, size_repl_string, idx):
+	"""
+	Function takes as parameters the template string, hexadecimal certificate data
+	representation string, certificate size in bytes string and certificate number
+	and replaces the patterns from template with the given strings according to
+	certificate number
+	"""
+	data_pattern = CERT_DATA_TEMPLATE_STRING.format(idx)
+	template = re.sub(data_pattern, data_repl_string, template)
+
+	size_pattern = CERT_LEN_TEMPLATE_STRING.format(idx)
+	template = re.sub(size_pattern, size_repl_string, template)
+	
+	return template
 	
 
 if __name__ == "__main__":
