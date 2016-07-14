@@ -6,7 +6,12 @@ import binascii
 
 
 CERT_DATA_TEMPLATE_STRING = "<certificate_data_{0}>"
-CERT_LEN_TEMPLATE_STRING = "<certificate_len_{0}>"
+CERT_INFO_TEMPLATE_STRING = '\t\t"<cert_file_{0}>", \t//.filename \n'			\
+							'\t\t<cert_len_{0}>, \t\t\t\t//.size \n'
+							
+						
+CERT_FILENAME_PATTERN = "<cert_file_{0}>"
+CERT_SIZE_PATTERN = "<cert_len_{0}>"							
 
 
 def print_program_info():
@@ -78,14 +83,20 @@ def generate_template(tar):
 	template_str = "#ifndef CERTS_H\n#define CERTS_H\n\n"
 	template_str += "#define NUMBER_OF_CERTS\t\t{}\n\n".format(cert_number)
 	
-	template_str += "const char cert_binary_storage[NUMBER_OF_CERTS][] = {\n"
+	template_str += "typedef struct sCertInfo {\n"	\
+					"	char* \t\t filename;\n"		\
+					"	unsigned int size;\n"		\
+					"} CertInfo_t;\n\n"
+	
+	template_str += "#pragma pack(1)\n"
+	template_str += "const char *const cert_binary_storage[NUMBER_OF_CERTS] = {\n"
 	for cert_iter_id in xrange(cert_number):
 		template_str += "\t" + CERT_DATA_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
 	template_str += "};\n\n"
 	
-	template_str += "const int cert_size_bytes[NUMBER_OF_CERTS][] = {\n"
+	template_str += "const CertInfo_t cert_info[NUMBER_OF_CERTS] = {\n"
 	for cert_iter_id in xrange(cert_number):
-		template_str += "\t" + CERT_LEN_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
+		template_str += "\t{\n" + CERT_INFO_TEMPLATE_STRING.format(cert_iter_id) + "\t},\n"
 	template_str += "};\n\n"
 	
 	template_str += "#endif\n\n"
@@ -100,20 +111,20 @@ def get_c_format_string_from_tar(tar_content_files):
 	"""
 	index = 0
 	for tarinfo in tar_content_files:
+		# Read cert file as binary and generate C style hex string
 		certfile = open(tarinfo.name, 'rb')
 		binary_content = certfile.read()
-
 		hex_content = binascii.b2a_hex(binary_content)
 		hex_content = re.findall('..', hex_content)
-
-		c_format_hex_list = ['0x'+num for num in hex_content]
-		c_format_str = "{" + ",".join(c_format_hex_list) + "}"
-
-		yield (index, c_format_str, len(c_format_hex_list))
+		c_format_hex_list = ['\\x'+num for num in hex_content]
+		size = len(c_format_hex_list)
+		c_format_str = '{"' + "".join(c_format_hex_list) + '"}'
+			
+		yield (index, c_format_str, tarinfo.name, size)
 		index = index + 1
 		
 		
-def replace_data_in_template(template, data_repl_string, size_repl_string, idx):
+def replace_data_in_template(idx, template, data_repl_str, filename_repl_str, size_repl_str):
 	"""
 	Function takes as parameters the template string, hexadecimal certificate data
 	representation string, certificate size in bytes string and certificate number
@@ -121,11 +132,14 @@ def replace_data_in_template(template, data_repl_string, size_repl_string, idx):
 	certificate number
 	"""
 	data_pattern = CERT_DATA_TEMPLATE_STRING.format(idx)
-	template = re.sub(data_pattern, data_repl_string, template)
-
-	size_pattern = CERT_LEN_TEMPLATE_STRING.format(idx)
-	template = re.sub(size_pattern, size_repl_string, template)
+	template = re.sub(data_pattern, data_repl_str, template)
 	
+	filename_pattern = CERT_FILENAME_PATTERN.format(idx)
+	template = re.sub(filename_pattern, filename_repl_str, template)
+	
+	size_pattern = CERT_SIZE_PATTERN.format(idx)
+	template = re.sub(size_pattern, size_repl_str, template)
+
 	return template
 	
 
@@ -145,11 +159,14 @@ if __name__ == "__main__":
 	# Get TarInfo for each file in tar archive
 	tar_content_files = tar.getmembers()
 	# Process each certificate file and put its data in template
-	for idx, cert_data_c_format, cert_size_bytes in get_c_format_string_from_tar(tar_content_files):
-		template_string = replace_data_in_template(	template_string, 
+	for idx, cert_data_c_format, cert_filename, cert_size_bytes \
+		in get_c_format_string_from_tar(tar_content_files):
+		template_string = replace_data_in_template(	idx,
+													template_string, 
 													cert_data_c_format, 
-													str(cert_size_bytes), 
-													idx)
+													cert_filename,
+													str(cert_size_bytes))
+													
 	# Close tar file as it's not needed anymore
 	tar.close()		
 	
