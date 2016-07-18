@@ -11,7 +11,8 @@ CERT_INFO_TEMPLATE_STRING = '\t\t"<cert_file_{0}>", \t//.filename \n'			\
 							
 						
 CERT_FILENAME_PATTERN = "<cert_file_{0}>"
-CERT_SIZE_PATTERN = "<cert_len_{0}>"							
+CERT_SIZE_PATTERN = "<cert_len_{0}>"	
+CERT_STORAGE_SIZE_PATTERN = "<CERT_STORAGE_SIZE_PATTERN>"						
 
 
 def print_program_info():
@@ -81,7 +82,8 @@ def generate_template(tar):
 	"""
 	cert_number = len(tar.getmembers())
 	template_str = "#ifndef CERTS_H\n#define CERTS_H\n\n"
-	template_str += "#define NUMBER_OF_CERTS\t\t{}\n\n".format(cert_number)
+	template_str += "#define NUMBER_OF_CERTS\t\t\t\t\t\t{}\n\n".format(cert_number)
+	template_str += "#define CERT_STORAGE_SIZE_PATTERN\t\t\t" + CERT_STORAGE_SIZE_PATTERN + "\n\n"
 	
 	template_str += "typedef struct sCertInfo {\n"	\
 					"	char* \t\t filename;\n"		\
@@ -89,10 +91,10 @@ def generate_template(tar):
 					"} CertInfo_t;\n\n"
 	
 	template_str += "#pragma pack(1)\n"
-	template_str += "const char *const cert_binary_storage[NUMBER_OF_CERTS] = {\n"
+	template_str += "const char cert_binary_storage[CERT_STORAGE_SIZE_PATTERN] = \n{\n"
 	for cert_iter_id in xrange(cert_number):
-		template_str += "\t" + CERT_DATA_TEMPLATE_STRING.format(cert_iter_id) + ",\n"
-	template_str += "};\n\n"
+		template_str += CERT_DATA_TEMPLATE_STRING.format(cert_iter_id)
+	template_str += "\n};\n\n"
 	
 	template_str += "const CertInfo_t cert_info[NUMBER_OF_CERTS] = {\n"
 	for cert_iter_id in xrange(cert_number):
@@ -118,7 +120,7 @@ def get_c_format_string_from_tar(tar_content_files):
 		hex_content = re.findall('..', hex_content)
 		c_format_hex_list = ['\\x'+num for num in hex_content]
 		size = len(c_format_hex_list)
-		c_format_str = '{"' + "".join(c_format_hex_list) + '"}'
+		c_format_str = '"' + "".join(c_format_hex_list) + '"'
 			
 		yield (index, c_format_str, tarinfo.name, size)
 		index = index + 1
@@ -159,6 +161,7 @@ if __name__ == "__main__":
 	# Get TarInfo for each file in tar archive
 	tar_content_files = tar.getmembers()
 	# Process each certificate file and put its data in template
+	total_size_bytes = 0
 	for idx, cert_data_c_format, cert_filename, cert_size_bytes \
 		in get_c_format_string_from_tar(tar_content_files):
 		template_string = replace_data_in_template(	idx,
@@ -166,6 +169,9 @@ if __name__ == "__main__":
 													cert_data_c_format, 
 													cert_filename,
 													str(cert_size_bytes))
+		total_size_bytes += cert_size_bytes
+		
+	template_string = re.sub(CERT_STORAGE_SIZE_PATTERN, str(total_size_bytes), template_string)
 													
 	# Close tar file as it's not needed anymore
 	tar.close()		
